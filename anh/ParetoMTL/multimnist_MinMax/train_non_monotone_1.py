@@ -4,13 +4,12 @@ import torch
 import torch.utils.data
 from torch.autograd import Variable
 
-from model_lenet import RegressionModel, RegressionTrain
-from model_resnet import MnistResNet, RegressionTrainResNet
+from ParetoMTL.multimnist.model_lenet import RegressionModel, RegressionTrain
+from ParetoMTL.multimnist.model_resnet import MnistResNet, RegressionTrainResNet
 
 from min_norm_solvers import MinNormSolver
 torch.autograd.set_detect_anomaly(True)
 import pickle
-import time
 
 def get_d_paretomtl_init(grads,value,weights,i):
     """ 
@@ -61,10 +60,9 @@ def get_d_paretomtl(grads,value,weights,i, reference_vectors):
 
     # calculate the descent direction
     # if torch.sum(idx) <= 0:
-    if True:
-        # sol, nd = MinNormSolver.find_min_norm_element([[grads[t]/reference_vectors[t]] for t in range(len(grads))])
-        sol, nd = MinNormSolver.find_min_norm_element([[grads[t]/reference_vectors[t]] for t in range(len(grads))])
-        return torch.tensor(sol).cuda().float()
+    # sol, nd = MinNormSolver.find_min_norm_element([[grads[t]/reference_vectors[t]] for t in range(len(grads))])
+    sol, nd = MinNormSolver.find_min_norm_element([[grads[t]/reference_vectors[t]] for t in range(len(grads))])
+    return torch.tensor(sol).cuda().float()
 
 
     # vec =  torch.cat((grads, torch.matmul(w[idx],grads)))
@@ -91,7 +89,7 @@ def circle_points(r, n):
     return circles
 
 # Lr: learning rate for deep learning models
-def train(dataset, base_model, niter, npref, init_weight, pref_idx, ref_vecs, eps=0.4, sigma=0.9, eta=0.01, Lr=1e-3): 
+def train(dataset, base_model, niter, npref, init_weight, pref_idx, ref_vecs, eps=0.4, sigma=0.9, eta=0.5): 
 
     # generate #npref preference vectors      
     n_tasks = 2
@@ -150,11 +148,11 @@ def train(dataset, base_model, niter, npref, init_weight, pref_idx, ref_vecs, ep
 
     # choose different optimizer for different base model
     if base_model == 'lenet':
-        optimizer = torch.optim.SGD(model.parameters(), lr=Lr, momentum=0.9)
+        optimizer = torch.optim.SGD(model.parameters(), lr=1e-3, momentum=0.9)
         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[15,30,45,60,75,90], gamma=0.5)
     
     if base_model == 'resnet18':
-        optimizer = torch.optim.Adam(model.parameters(), lr=Lr)
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[10,20], gamma=0.1)
     
     # store infomation during optimization
@@ -222,7 +220,7 @@ def train(dataset, base_model, niter, npref, init_weight, pref_idx, ref_vecs, ep
             for i in range(len(task_loss)):
                 task_loss = model(X, ts)
                 if i == 0:
-                    loss_total = weight_vec[i] * task_loss[i]
+                    loss_total = weight_vec[i] * task_loss[i] 
                 else:
                     loss_total = loss_total + weight_vec[i] * task_loss[i]
             
@@ -233,15 +231,19 @@ def train(dataset, base_model, niter, npref, init_weight, pref_idx, ref_vecs, ep
             continue
         # break the loop once a feasible solutions is found
         break
-
-    with open(path+'/result_non_monotone_2.txt', 'a') as f:
-        ref_vec_string = ', '.join(map(str, ref_vecs[pref_idx].cpu().numpy()))
+    # ref_vecs[pref_idx].cpu().numpy() = 
+    with open(path+'/result_non_monotone_1.txt', 'a') as f:
+        ref_vec_string = ', '.join(map(str, [0.5, 0.5]))
         f.write(f'Reference vector ({pref_idx + 1}/{npref}): ' + ref_vec_string + '\n')
-
+    res = []
+    # res_l = []
     # run niter epochs of ParetoMTL 
+    # optimizer.param_groups[-1]['lr'] = 0.5
     for t in range(niter):
-        scheduler.step()
+        # scheduler.step()
         model.train()
+        count = 0 # abbreviation for s
+        loss_train = []
         for (it, batch) in enumerate(train_loader):
             X = batch[0]
             ts = batch[1]
@@ -271,77 +273,62 @@ def train(dataset, base_model, niter, npref, init_weight, pref_idx, ref_vecs, ep
 
             grads_list = [torch.cat(grads[i]) for i in range(len(grads))]
             grads = torch.stack(grads_list)
-            
+            # print('grads = ', grads)
+            # print('grads_norm = ', [grads[t]/ref_vecs[pref_idx].cpu().numpy()[t] for t in range (2)])
             # calculate the weights
             losses_vec = torch.stack(losses_vec)
-            weight_vec = get_d_paretomtl(grads,losses_vec,ref_vecs,pref_idx, ref_vecs[pref_idx].cpu().numpy())
+            # ref_vecs[pref_idx].cpu().numpy() = 
+            ref = np.array([0.5, 0.5])
+            weight_vec = get_d_paretomtl(grads,losses_vec,ref_vecs,pref_idx, ref)
             
-            normalize_coeff = n_tasks / torch.sum(torch.abs(weight_vec))
-            weight_vec = weight_vec * normalize_coeff
+            # normalize_coeff = n_tasks / torch.sum(torch.abs(weight_vec))
+            # weight_vec = weight_vec * normalize_coeff
             # print('weight = ', weight_vec)
             # optimization step
             optimizer.zero_grad()
             task_loss = model(X, ts)
+            loss_train.append(task_loss)
+            
+            # print('task_loss = ', task_loss)
             for i in range(len(task_loss)):     
                 if i == 0:
-                    loss_total = weight_vec[i] * task_loss[i] /ref_vecs[pref_idx].cpu().numpy()[i]
+                    loss_total = weight_vec[i] * task_loss[i] /ref[i]
                 else:
-                    loss_total = loss_total + weight_vec[i] * task_loss[i] /ref_vecs[pref_idx].cpu().numpy()[i]
+                    loss_total = loss_total + weight_vec[i] * task_loss[i] /ref[i]
+            print('loss_total = ', loss_total)
+            print('Lr = ', optimizer.param_groups[-1]['lr'])
+            loss_grad = [weight_vec[t] * grads[t]/ref[t] for t in range (2)]
+            s = loss_grad[0] + loss_grad[1]
+            # print('loss_grad = ', [weight_vec[t] * grads[t]/ref_vecs[pref_idx].cpu().numpy()[t] for t in range (2)])
+            loss_total.backward(retain_graph=True) 
+            optimizer.step()
+            # ref = ref_vecs[pref_idx].cpu().numpy()  
             
-            loss_total.backward() 
-            # optimizer.step() 
-            ref = ref_vecs[pref_idx].cpu().numpy() # 
-            
-            # Make sure to have copies of the original parameters and gradients 
-            original_params = []
-            original_grads = []
-            # Store the original value
-            for p in model.parameters():
-                if p.requires_grad:
-                    original_params.append(p.clone())  # Clone the parameter
-                    if p.grad is not None:
-                        original_grads.append(p.grad.clone())  # Clone the gradient
-                    else:
-                        original_grads.append(None)  # Handle the case where grad is None
-                        
-            norm_acc = 0
-            for p in model.parameters():
-                if p.requires_grad is False:
-                    continue
-                dp = p.grad
-                if dp is not None:
-                    norm_acc += dp.data.norm(2).item()**2
-                    p.data -= Lr * dp
-            # print('norm_acc = ', norm_acc)  
-        
+
+            Lr = optimizer.param_groups[-1]['lr']          
+            # print('lr = ', Lr)
             task_loss_after = model(X, ts)
-            if (max(task_loss_after[0]/ref[0], task_loss_after[1]/ref[1]) <= max(task_loss[0]/ref[0], task_loss[1]/ref[1]) - eps * Lr * norm_acc):
-                Lr = Lr + eta ** it
+            # print(torch.norm(loss_grad))
+            if (max(task_loss_after[0]/ref[0], task_loss_after[1]/ref[1]) <= max(task_loss[0]/ref[0], task_loss[1]/ref[1]) - eps * Lr * torch.norm(s) ** 2):
+                Lr = Lr + eta ** it * sigma ** count
             else:
-                Lr = Lr * sigma 
-            
-            # Revert to the original parameters and gradients
-            for p, original_p, original_grad in zip(model.parameters(), original_params, original_grads):
-                if p.requires_grad:
-                    p.data.copy_(original_p.data)  # Revert parameter to original
-                    if original_grad is not None:
-                        p.grad.copy_(original_grad)  # Revert gradient to original
-                    else:
-                        p.grad = None  # Handle the case where grad was None
-                            
-            for p in model.parameters():
-                if p.requires_grad is False:
-                    continue
-                dp = p.grad
-                if dp is not None:
-                #     norm_acc += dp.data.norm(2).item()**2
-                    p.data -= Lr * dp
-            
-            if Lr < 1e-50:
-                with open(path+'/result_non_monotone_2.txt', 'a') as f:
-                    f.write('kappa to 0' + '\n') 
-                continue
+                Lr = Lr * sigma  
+                count += 1
+                
+            if it % 50 == 0:
+                optimizer.param_groups[-1]['lr'] = Lr
+            if it == len(train_loader) - 1:
+                print(optimizer.param_groups[-1]['lr'])
+            res.append(Lr)
+        
+        # print(loss_train)    
         # calculate and record performance``
+        # plt.plot(np.arange(0, len(res)), res)
+        # print(res)
+        # plt.savefig(r'/home/ubuntu/workspace/DANC/Lr.png')
+        # plt.show()
+        # print('finish')
+        # time.sleep(100)
         if t == 0 or (t + 1) % 2 == 0:
             
             model.eval()
@@ -415,8 +402,9 @@ def train(dataset, base_model, niter, npref, init_weight, pref_idx, ref_vecs, ep
             t + 1, niter, weights[-1], task_train_losses[-1], train_accs[-1], task_test_losses[-1], test_accs[-1])
                 
                 print(result_string)
-                with open(path+'/result_non_monotone_2.txt', 'a') as f:
+                with open(path+'/result_non_monotone_1.txt', 'a') as f:
                     f.write(result_string + '\n') 
+                # time.sleep(10)
 
     torch.save(model.model.state_dict(), '/home/ubuntu/workspace/dataset/DANC/Result/Model_MTL_MinMax/%s_%s_niter_%d_npref_%d_prefidx_%d_ver_0_1.pickle'%(dataset, base_model, niter, npref, pref_idx))
 
@@ -446,7 +434,6 @@ def run(dataset = 'mnist',base_model = 'lenet', niter = 100, npref = 5):
 run(dataset = 'mnist', base_model = 'lenet', niter = 100, npref = 20)
 #run(dataset = 'fashion', base_model = 'lenet', niter = 100, npref = 5)
 #run(dataset = 'fashion_and_mnist', base_model = 'lenet', niter = 100, npref = 5)
-
 #run(dataset = 'mnist', base_model = 'resnet18', niter = 20, npref = 5)
 #run(dataset = 'fashion', base_model = 'resnet18', niter = 20, npref = 5)
 #run(dataset = 'fashion_and_mnist', base_model = 'resnet18', niter = 20, npref = 5)
