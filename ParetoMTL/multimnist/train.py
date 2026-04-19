@@ -4,10 +4,10 @@ import torch
 import torch.utils.data
 from torch.autograd import Variable
 
-from model_lenet import RegressionModel, RegressionTrain
-from model_resnet import MnistResNet, RegressionTrainResNet
+from .model_lenet import RegressionModel, RegressionTrain
+from .model_resnet import MnistResNet, RegressionTrainResNet
 
-from min_norm_solvers import MinNormSolver
+from .min_norm_solvers import MinNormSolver
 
 import pickle
 
@@ -358,11 +358,11 @@ def run(dataset = 'mnist',base_model = 'lenet', niter = 100, npref = 5):
         
 
 
-run(dataset = 'mnist', base_model = 'lenet', niter = 100, npref = 5)
-#run(dataset = 'fashion', base_model = 'lenet', niter = 100, npref = 5)
-#run(dataset = 'fashion_and_mnist', base_model = 'lenet', niter = 100, npref = 5)
+# run(dataset = 'mnist', base_model = 'lenet', niter = 100, npref = 5)
+# run(dataset = 'fashion', base_model = 'lenet', niter = 100, npref = 5)
+# run(dataset = 'fashion_and_mnist', base_model = 'lenet', niter = 100, npref = 5)
 
-#run(dataset = 'mnist', base_model = 'resnet18', niter = 20, npref = 5)
-#run(dataset = 'fashion', base_model = 'resnet18', niter = 20, npref = 5)
-#run(dataset = 'fashion_and_mnist', base_model = 'resnet18', niter = 20, npref = 5)
+# run(dataset = 'mnist', base_model = 'resnet18', niter = 20, npref = 5)
+# run(dataset = 'fashion', base_model = 'resnet18', niter = 20, npref = 5)
+# run(dataset = 'fashion_and_mnist', base_model = 'resnet18', niter = 20, npref = 5)
 

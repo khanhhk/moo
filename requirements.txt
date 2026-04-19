@@ -1,9 +1,6 @@
-# download dataset
 gdown==6.0.0
-
-# visualization
 matplotlib==3.10.8
-
-#
+pandas==3.0.2
+scikit-learn==1.8.0
 torch==2.11.0+cu126
 torchvision==0.26.0+cu126
