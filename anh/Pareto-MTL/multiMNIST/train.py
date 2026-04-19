@@ -101,12 +101,12 @@ def train(dataset, base_model, niter, npref, init_weight, pref_idx):
 
     # MultiMNIST: multi_mnist.pickle
     if dataset == 'mnist':
-        with open('/home/ubuntu/workspace/dataset/DANC/multi_mnist.pickle','rb') as f:
+        with open('data/multi_mnist.pickle','rb') as f:
             trainX, trainLabel,testX, testLabel = pickle.load(f)  
     
     # MultiFashionMNIST: multi_fashion.pickle
     if dataset == 'fashion':
-        with open('/home/ubuntu/workspace/dataset/DANC/multi_fashion.pickle','rb') as f:
+        with open('data/multi_fashion.pickle','rb') as f:
             trainX, trainLabel,testX, testLabel = pickle.load(f)  
     
     
@@ -166,7 +166,7 @@ def train(dataset, base_model, niter, npref, init_weight, pref_idx):
     train_accs = []
     task_test_losses = []
     test_accs = []
-    path = "/home/ubuntu/workspace/DANC/Pareto-MTL" # output dir
+    path = "anh/" # output dir
     
     # print the current preference vector
     print('Preference Vector ({}/{}):'.format(pref_idx + 1, npref))
